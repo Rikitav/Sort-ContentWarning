@@ -9,6 +9,8 @@ By launching the program by double-clicking `LMB`, the program will enumerate al
 By running the program with the argument `-a` or `--auto` you will activate the observer mode and the program will try to catch each video right at the saving stage
 #### Help
 Run the program with the argument `-h` or `--help` to get a description of the program and arguments
+### Сhanging the save directory
+The save directory can be changed if you pass the `-d` or `--dir` parameter to the program and specify the path to the existing folder as the second parameter. The use of environment variables is supported. For example, running the program with the parameters `-d %UserProfile%\Documents`, the new saving directory will be `C:\Users\YourUser\Documents\Content Warning`
 
 # Locations
 Scanning directory : `%UserProfile%\Desktop` <br />
