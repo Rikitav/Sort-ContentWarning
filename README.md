@@ -14,4 +14,4 @@ The save directory can be changed if you pass the `-d` or `--dir` parameter to t
 
 # Locations
 Scanning directory : `%UserProfile%\Desktop` <br />
-Videos location : `%UserProfile%\Desktop\Content Warning`
+Default save location : `%UserProfile%\Desktop`
