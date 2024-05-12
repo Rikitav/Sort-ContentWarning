@@ -1,108 +1,124 @@
 ﻿using System.Globalization;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
-internal class Program
+namespace SortContentWarning
 {
-    public static readonly string Desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
-    public static readonly string ContentFolder = Directory.CreateDirectory(Path.Combine(Desktop, "Content Warning")).FullName;
-    public static readonly string ConWarnFileKind = "content_warning_*.webm";
-    public static FileSystemWatcher? FsWatcher = null;
-
-    private static void Main(string[] args)
+    internal class Program
     {
-        WriteHeader();
-        if (!args.Any())
+        public static readonly string Desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        public static readonly string ConWarnFileKind = "content_warning_*.webm";
+
+        public static string ContentFolder;
+        public static readonly string ContentFolderVar = "ContentWarning_FootageDir";
+
+        private static void Main(string[] args)
         {
-            IEnumerable<string> DesktopEnum = Directory.EnumerateFiles(Desktop, ConWarnFileKind);
-            if (!DesktopEnum.Any())
+            ContentFolder = Environment.GetEnvironmentVariable(ContentFolderVar, EnvironmentVariableTarget.User);
+            if (ContentFolder == null)
+                ContentFolder = Directory.CreateDirectory(Path.Combine(Desktop, "Content Warning")).FullName;
+
+            ConsoleWrite.Header(ContentFolder);
+            if (args.Length == 0)
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("No footage file finded in \"{0}\"!", Desktop);
-                Console.WriteLine("Exiting...");
-                Console.ResetColor();
+                if (!Directory.EnumerateFiles(Desktop, ConWarnFileKind).Any())
+                {
+                    ConsoleWrite.Error("No footage files finded", "Exiting...");
+                    return;
+                }
+
+                foreach (string ConWarnVid in Directory.EnumerateFiles(Desktop, ConWarnFileKind))
+                {
+                    FileInfo ConWarnFootage = new FileInfo(ConWarnVid);
+                    MoveVideoFile(ConWarnFootage);
+                }
+
                 return;
             }
 
-            foreach (string ConWarnVid in DesktopEnum)
+            switch (args[0].ToLower())
             {
-                FileInfo ConWarnFootage = new FileInfo(ConWarnVid);
-                MoveVideoFile(ConWarnFootage);
+                case "-a":
+                case "--auto":
+                    {
+                        ConsoleWrite.Notify("\rAutomatic file watcher mode\n");
+                        FileSystemWatcher FsWatcher = CreateWatcher();
+                        AppDomain.CurrentDomain.ProcessExit += (o, e) => FsWatcher.Dispose();
+                        Thread.Sleep(-1);
+                        return;
+                    }
+
+                case "-d":
+                case "--dir":
+                    {
+                        if (args.Length == 1)
+                        {
+                            ConsoleWrite.Error("No path", "You need to specify the path to the new directory as the second parameter.");
+                            return;
+                        }
+
+                        string NewPath = Regex.Replace(args[1], "%(.+?)%", (x) =>
+                        {
+                            string? NewValue = Environment.GetEnvironmentVariable(x.Groups[1].Value);
+                            return NewValue ?? x.Value;
+                        });
+
+                        if (!Directory.Exists(NewPath))
+                        {
+                            ConsoleWrite.Error("Incorect path format", "The path must point to an existing directory");
+                            return;
+                        }
+
+                        if (!Path.IsPathFullyQualified(NewPath))
+                        {
+                            ConsoleWrite.Error("Incorect path format", "The path must not be relative");
+                            return;
+                        }
+
+                        ConsoleWrite.Notify(string.Format("New saving path is \"{0}\"", NewPath));
+                        Environment.SetEnvironmentVariable(ContentFolderVar, NewPath, EnvironmentVariableTarget.User);
+                        return;
+                    }
+
+                case "-h":
+                case "--help":
+                    {
+                        ConsoleWrite.Help();
+                        return;
+                    }
+
+                default:
+                    ConsoleWrite.Error("Incorect arguments", "Type [-h, --help] for showing program information");
+                    return;
             }
-
-            return;
         }
 
-        switch (args[0].ToLower())
+        public static FileSystemWatcher CreateWatcher()
         {
-            case "-a":
-            case "--auto":
-                {
-                    WriteAutoModeNotify();
-                    FsWatcher = CreateWatcher();
-                    AppDomain.CurrentDomain.ProcessExit += (o, e) => FsWatcher.Dispose();
-                    Thread.Sleep(-1);
-                    break;
-                }
+            FileSystemWatcher watcher = new FileSystemWatcher(Desktop, ConWarnFileKind)
+            {
+                NotifyFilter = NotifyFilters.FileName,
+                IncludeSubdirectories = false,
+                EnableRaisingEvents = true
+            };
 
-            case "-h":
-            case "--help":
-                {
-                    WriteHelp();
-                    break;
-                }
-
-            default:
-                Console.WriteLine("ERROR : Incorect arguments");
-                Console.WriteLine("Type [-h, --help] for showing program information");
-                break;
+            watcher.Created += (o, e) => MoveVideoFile(new FileInfo(e.FullPath));
+            return watcher;
         }
-    }
 
-    public static void WriteHeader()
-    {
-        Console.WriteLine("ContentWarning footage sorter {0}", Assembly.GetExecutingAssembly().GetName().Version.ToString());
-        Console.WriteLine("ContentFolder : \"{0}\"\n", ContentFolder);
-    }
-
-    public static void WriteAutoModeNotify()
-    {
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("\rAutomatic file watcher mode\n");
-        Console.ResetColor();
-    }
-
-    public static void WriteHelp()
-    {
-        Console.WriteLine("Moves all footage made in the game \"Content Warning\" to a separate folder instead of littering the desktop");
-        Console.WriteLine("Can be launched with [-a, --auto] flag for automaic moving on footage saving");
-        Console.WriteLine("And remember, Snails Sucks!\n");
-    }
-
-    public static FileSystemWatcher CreateWatcher()
-    {
-        FileSystemWatcher watcher = new FileSystemWatcher(Desktop, ConWarnFileKind)
+        public static void MoveVideoFile(FileInfo Info)
         {
-            NotifyFilter = NotifyFilters.FileName,
-            IncludeSubdirectories = false,
-            EnableRaisingEvents = true
-        };
-
-        watcher.Created += (o, e) => MoveVideoFile(new FileInfo(e.FullPath));
-        return watcher;
-    }
-
-    public static void MoveVideoFile(FileInfo Info)
-    {
-        try
-        {
-            Info.MoveTo(Path.Combine(ContentFolder, Info.Name), true);
-            Console.WriteLine("Moved \"{0}\" to ContentFolder", Info.Name);
-        }
-        catch (Exception Exc)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Failed to move \"{0}\" to ContentFolder - {1}", Info.Name, Exc.Message);
-            Console.ResetColor();
+            try
+            {
+                Info.MoveTo(Path.Combine(ContentFolder, Info.Name), true);
+                Console.WriteLine("Moved \"{0}\" to ContentFolder", Info.Name);
+            }
+            catch (Exception Exc)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                ConsoleWrite.Error("Failed to move", string.Format("\"{0}\". Exception - \"{1}\"", Info.Name, Exc.Message));
+                Console.ResetColor();
+            }
         }
     }
 }
